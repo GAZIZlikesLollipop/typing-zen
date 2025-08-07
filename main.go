@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 type testState struct {
-	wordsCount    int16
 	completeWords int16
 	input         string
 	userWords     []string
@@ -29,26 +27,19 @@ var words = []string{
 func initialState() testState {
 	wordsCountFlag := flag.Int("w", 0, "enter words count")
 	flag.Parse()
-	if *wordsCountFlag < 1 || *wordsCountFlag > 1000 {
+	if *wordsCountFlag < 1 || *wordsCountFlag > 300 {
 		fmt.Println("Ошибка, вы ввели колчитство слов вне диапозона 1-1000")
 		return testState{}
 	}
-	var wordsInds []int
 	var wordas []string
 	for i := 0; *wordsCountFlag > i; i++ {
 		randNum := rand.Intn(*wordsCountFlag)
-		if slices.Contains(wordsInds, randNum) {
-			wordsInds = append(wordsInds, rand.Intn(*wordsCountFlag))
-		} else {
-			wordsInds = append(wordsInds, randNum)
-			wordas = append(wordas, words[randNum])
-		}
+		wordas = append(wordas, words[randNum])
 	}
 	return testState{
 		completeWords: 0,
 		input:         "",
 		userWords:     wordas,
-		wordsCount:    int16(*wordsCountFlag),
 		cursor:        0,
 		width:         0,
 		height:        0,
@@ -60,11 +51,41 @@ func (s testState) Init() tea.Cmd {
 }
 
 func (s testState) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	str := fmt.Sprint(s.userWords)
+	result := str[1 : len(str)-2]
+	if (&s == &testState{}) {
+		return s, tea.Quit
+	}
+	if len(s.input) > len(result)-1 {
+		return s, tea.Quit
+	}
+	if len(s.input) > 0 {
+		worda := fmt.Sprint(s.userWords)[1 : len(fmt.Sprint(s.userWords))-2]
+		if len(worda) > len(s.input)+1 {
+			if string(worda[len(s.input)+1]) == " " {
+				s.completeWords += 1
+			}
+		}
+	}
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c", "q", "й", "ctrl+с":
 			return s, tea.Quit
+		case "backspace":
+			if len(s.input) > 0 {
+				s.input = s.input[:len(s.input)-1]
+				s.cursor -= 1
+			}
+			worda := fmt.Sprint(s.userWords)[1 : len(fmt.Sprint(s.userWords))-2]
+			if string(worda[len(s.input)+1]) == " " {
+				s.completeWords -= 1
+			}
+			return s, nil
+		default:
+			s.input += msg.String()
+			s.cursor += 1
+			return s, nil
 		}
 	case tea.WindowSizeMsg:
 		s.width = msg.Width
@@ -74,19 +95,28 @@ func (s testState) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (s testState) View() string {
-	var result string
-	textStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#C0C0C0"))
+	grayColor := lipgloss.Color("#454545ff")
+	textStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#9e9e9eff")).Background(grayColor)
 	containerStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("#454545ff")).
+		Background(grayColor).
 		AlignVertical(lipgloss.Center).
 		Align(lipgloss.Center).
 		Width(s.width).
 		Height(s.height)
-	count := fmt.Sprintf("%v/%v\n", s.completeWords, s.wordsCount)
-	str := fmt.Sprintln(s.userWords)
-	result += str[1 : len(str)-2]
-	return containerStyle.Render(fmt.Sprintf("%s%s", count, textStyle.Render(result)))
+	inputStyle := lipgloss.NewStyle().Background(grayColor)
+	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff0000ff")).Background(grayColor)
+	count := fmt.Sprintf("%v/%v\n", s.completeWords, len(s.userWords))
+	str := fmt.Sprint(s.userWords)[1 : len(fmt.Sprint(s.userWords))-2]
+	result := textStyle.Render(str[len(s.input):])
+	var input string
+	for i := 0; len(s.input) > i; i++ {
+		if s.input[i] == str[i] {
+			input += inputStyle.Render(string(s.input[i]))
+		} else {
+			input += errStyle.Render(string(s.input[i]))
+		}
+	}
+	return containerStyle.Render(fmt.Sprintf("%s%s%s", count, input, result))
 }
 
 func main() {

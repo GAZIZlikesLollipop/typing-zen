@@ -56,7 +56,8 @@ func (s testState) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if (&s == &testState{}) {
 		return s, tea.Quit
 	}
-	if len(s.input) > len(result)-1 {
+	if len(s.input) == len(result) {
+		s.completeWords += 1
 		return s, tea.Quit
 	}
 	if len(s.input) > 0 {
@@ -70,7 +71,7 @@ func (s testState) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q", "й", "ctrl+с":
+		case "ctrl+c", "q", "й", "ctrl+с", "esc":
 			return s, tea.Quit
 		case "backspace":
 			if len(s.input) > 0 {
@@ -78,9 +79,15 @@ func (s testState) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				s.cursor -= 1
 			}
 			worda := fmt.Sprint(s.userWords)[1 : len(fmt.Sprint(s.userWords))-2]
-			if string(worda[len(s.input)+1]) == " " {
+			if string(worda[len(s.input)+1]) == " " && s.completeWords > 0 {
 				s.completeWords -= 1
 			}
+			return s, nil
+		case "enter":
+			s.input += " "
+			return s, nil
+		case "tab":
+			s.input += "    "
 			return s, nil
 		default:
 			s.input += msg.String()
@@ -104,7 +111,9 @@ func (s testState) View() string {
 		Width(s.width).
 		Height(s.height)
 	inputStyle := lipgloss.NewStyle().Background(grayColor)
-	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff0000ff")).Background(grayColor)
+	redColor := lipgloss.Color("#ff0000ff")
+	errStyle := lipgloss.NewStyle().Foreground(redColor).Background(grayColor)
+	errContiner := lipgloss.NewStyle().Background(redColor).Height(1).Width(1)
 	count := fmt.Sprintf("%v/%v\n", s.completeWords, len(s.userWords))
 	str := fmt.Sprint(s.userWords)[1 : len(fmt.Sprint(s.userWords))-2]
 	result := textStyle.Render(str[len(s.input):])
@@ -113,7 +122,11 @@ func (s testState) View() string {
 		if s.input[i] == str[i] {
 			input += inputStyle.Render(string(s.input[i]))
 		} else {
-			input += errStyle.Render(string(s.input[i]))
+			if string(s.input[i]) == " " {
+				input += errContiner.Render(string(s.input[i]))
+			} else {
+				input += errStyle.Render(string(s.input[i]))
+			}
 		}
 	}
 	return containerStyle.Render(fmt.Sprintf("%s%s%s", count, input, result))
